@@ -1,55 +1,54 @@
 const express = require('express');
-const cors = require('cors');
-const mysql = require('mysql2');
+const { MongoClient } = require('mongodb');
+const bodyParser = require('body-parser');
 
 const app = express();
-app.use(cors());
-app.use(express.json());
+app.use(bodyParser.json());
 
-// MySQL connection
-const db = mysql.createConnection({
-  host: 'localhost',
-  user: 'root',
-  password: 'your_password',
-  database: 'student_db',
-});
+// MongoDB connection setup
+const url = 'mongodb://localhost:27017';
+const dbName = 'student_info';
 
-db.connect((err) => {
-  if (err) {
-    console.error('Error connecting to MySQL:', err);
-  } else {
-    console.log('Connected to MySQL');
-  }
-});
+let db;
 
-// Create the student table if it doesn't exist
-db.query(
-  `CREATE TABLE IF NOT EXISTS students (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(255),
-    age INT,
-    studentClass VARCHAR(255)
-  )`,
-  (err) => {
-    if (err) throw err;
-    console.log('Student table created or already exists');
-  }
-);
-
-// API to add a student
-app.post('/students', (req, res) => {
-  const { name, age, studentClass } = req.body;
-  const query = 'INSERT INTO students (name, age, studentClass) VALUES (?, ?, ?)';
-  db.query(query, [name, age, studentClass], (err, result) => {
+MongoClient.connect(url, { useNewUrlParser: true, useUnifiedTopology: true }, (err, client) => {
     if (err) {
-      console.error('Error adding student:', err);
-      return res.status(500).send('Server error');
+        console.error('Error connecting to MongoDB:', err);
+        return;
     }
-    res.send('Student added successfully');
-  });
+    db = client.db(dbName);
+    console.log('Connected to MongoDB!');
 });
 
+// Route to get all students
+app.get('/students', (req, res) => {
+    const collection = db.collection('students');
+    collection.find({}).toArray((err, result) => {
+        if (err) {
+            console.error(err);
+            res.status(500).send('Database error');
+        } else {
+            res.json(result);
+        }
+    });
+});
+
+// Route to insert a new student
+app.post('/students', (req, res) => {
+    const { name, age } = req.body;
+    const collection = db.collection('students');
+    collection.insertOne({ name, age }, (err, result) => {
+        if (err) {
+            console.error(err);
+            res.status(500).send('Database error');
+        } else {
+            res.status(201).send('Student added');
+        }
+    });
+});
+
+// Start the server
 const PORT = 5000;
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+    console.log(`Server running on port ${PORT}`);
 });
